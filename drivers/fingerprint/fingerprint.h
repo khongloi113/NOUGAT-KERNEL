@@ -41,7 +41,7 @@ static char sensor_status[SENSOR_STATUS_SIZE][10] ={"unknown", "failed",
 /* For Finger Detect Mode */
 enum {
 	DETECT_NORMAL = 0,
-	DETECT_ADM,			// Always on Detect Mode
+	DETECT_ADM = 1,			// Always on Detect Mode
 };
 
 #ifdef CONFIG_SENSORS_FINGERPRINT_DUALIZATION
