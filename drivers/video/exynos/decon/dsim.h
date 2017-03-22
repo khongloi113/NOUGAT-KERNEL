@@ -152,6 +152,8 @@ struct panel_private {
 	void *hmt_dim_data;
 	void *hmt_dim_info;
 	unsigned int *hmt_br_tbl;
+	unsigned int hmt_prev_status;
+	unsigned int hmt_support;
 #endif
 
 #ifdef CONFIG_LCD_ALPM
@@ -183,6 +185,10 @@ struct panel_private {
 	int lux;
 #ifdef CONFIG_CHECK_OCTA_CHIP_ID
 	unsigned char octa_id[25];
+#endif
+#ifdef CONFIG_LCD_WEAKNESS_CCB
+	unsigned char current_ccb;
+	unsigned int ccb_support;
 #endif
 };
 
@@ -241,6 +247,9 @@ struct dsim_device {
 	struct panel_private priv;
 
 	struct dsim_clks_param clks_param;
+	
+	struct timer_list		cmd_timer;
+	
 #ifdef CONFIG_LCD_ALPM
 	int 			alpm;
 #endif
@@ -379,4 +388,20 @@ u32 dsim_reg_get_hozval(u32 id);
 
 int dsim_write_hl_data(struct dsim_device *dsim, const u8 *cmd, u32 cmdSize);
 int dsim_read_hl_data(struct dsim_device *dsim, u8 addr, u32 size, u8 *buf);
+
+#ifdef CONFIG_LCD_HMT
+void display_off_for_VR(struct dsim_device *dsim);
+#endif
+
+//change
+#ifdef CONFIG_LCD_RES
+typedef enum lcd_res_type {
+	LCD_RES_DEFAULT = 0,
+	LCD_RES_FHD = 1920,
+	LCD_RES_HD = 1280,
+	LCD_RES_MAX
+} lcd_res_t;
+#endif
+
 #endif /* __DSIM_H__ */
+

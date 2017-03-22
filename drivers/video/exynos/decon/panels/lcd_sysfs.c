@@ -22,6 +22,10 @@
 #include <linux/sec_debug.h>
 #endif
 
+#ifdef CONFIG_PANEL_DDI_SPI
+#include "ddi_spi.h"
+#endif
+
 #if defined(CONFIG_EXYNOS_DECON_MDNIE_LITE)
 #include "mdnie.h"
 #endif
@@ -59,6 +63,7 @@ void mcd_mode_set(struct dsim_device *dsim)
 }
 
 #else
+
 void mcd_mode_set(struct dsim_device *dsim)
 {
 	int i = 0;
@@ -89,6 +94,7 @@ void mcd_mode_set(struct dsim_device *dsim)
 	dsim_write_hl_data(dsim, SEQ_TEST_KEY_OFF_F0, ARRAY_SIZE(SEQ_TEST_KEY_OFF_F0));
 }
 #endif
+
 static ssize_t mcd_mode_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
@@ -320,11 +326,12 @@ static ssize_t hmt_on_store(struct device *dev,
 
 	if (priv->hmt_on != value) {
 		mutex_lock(&priv->lock);
+		priv->hmt_prev_status = priv->hmt_on;
 		priv->hmt_on = value;
 		mutex_unlock(&priv->lock);
-		dev_info(dev, "++%s: %d\n", __func__, priv->hmt_on);
+		dev_info(dev, "++%s: %d %d\n", __func__, priv->hmt_on, priv->hmt_prev_status);
 		hmt_set_mode(dsim, false);
-		dev_info(dev, "--%s: %d\n", __func__, priv->hmt_on);
+		dev_info(dev, "--%s: %d %d\n", __func__, priv->hmt_on, priv->hmt_prev_status);
 	} else
 		dev_info(dev, "%s: hmt already %s\n", __func__, value ? "on" : "off");
 
@@ -337,69 +344,168 @@ static DEVICE_ATTR(hmt_on, 0664, hmt_on_show, hmt_on_store);
 #endif
 
 #ifdef CONFIG_LCD_ALPM
-#if defined(CONFIG_PANEL_S6E3HF3_DYNAMIC)
+
+int display_on_retry_cnt = 0;
+
+#define RDDPM_ADDR	0x0A
+#define RDDPM_REG_SIZE 3
+#define RDDPM_REG_DISPLAY_ON 0x04
+#define READ_STATUS_RETRY_CNT 3
+
+static int read_panel_status(struct dsim_device *dsim)
+{
+	int ret = 0;
+	unsigned char rddpm[RDDPM_REG_SIZE+1];
+	int retry_cnt = READ_STATUS_RETRY_CNT;
+
+read_rddpm_reg:
+	ret = dsim_read_hl_data(dsim, RDDPM_ADDR, RDDPM_REG_SIZE, rddpm);
+	if (ret != RDDPM_REG_SIZE) {
+		dsim_err("%s : can't read RDDPM Reg\n", __func__);
+		goto dump_exit;
+	}
+
+	dsim_info("%s : rddpm : %x\n", __func__, rddpm[0]);
+
+	if ((rddpm[0] & RDDPM_REG_DISPLAY_ON) == 0)  {
+		display_on_retry_cnt++;
+		dsim_info("%s : display on was not setted retry : %d\n", __func__, retry_cnt);
+		dsim_info("%s : display on was not setted total retry : %d\n", __func__, display_on_retry_cnt);
+		if (retry_cnt) {
+			dsim_write_hl_data(dsim, SEQ_DISPLAY_ON, ARRAY_SIZE(SEQ_DISPLAY_ON));
+			retry_cnt--;
+			goto read_rddpm_reg;
+		}
+
+		if (rddpm[0] & 0x80)
+			dsim_info("Dump Panel : Status Booster Voltage Status : ON\n");
+		else
+			dsim_info("Dump Panel :  Booster Voltage Status : OFF\n");
+
+		if (rddpm[0] & 0x40)
+			dsim_info("Dump Panel :  Idle Mode : On\n");
+		else
+			dsim_info("Dump Panel :  Idle Mode : OFF\n");
+
+		if (rddpm[0] & 0x20)
+			dsim_info("Dump Panel :  Partial Mode : On\n");
+		else
+			dsim_info("Dump Panel :  Partial Mode : OFF\n");
+
+		if (rddpm[0] & 0x10)
+			dsim_info("Dump Panel :  Sleep OUT and Working Ok\n");
+		else
+			dsim_info("Dump Panel :  Sleep IN\n");
+
+		if (rddpm[0] & 0x08)
+			dsim_info("Dump Panel :  Normal Mode On and Working Ok\n");
+		else
+			dsim_info("Dump Panel :  Sleep IN\n");
+	}
+dump_exit:
+	return ret;
+
+}
+
+static int alpm_write_set(struct dsim_device *dsim, struct lcd_seq_info *seq, u32 num)
+{
+	int ret = 0, i;
+
+	for (i = 0; i < num; i++) {
+		if (seq[i].cmd) {
+			ret = dsim_write_hl_data(dsim, seq[i].cmd, seq[i].len);
+			if (ret != 0) {
+				dsim_err("%s failed.\n", __func__);
+				return ret;
+			}
+		}
+		if (seq[i].sleep)
+			usleep_range(seq[i].sleep * 1000 , seq[i].sleep * 1000);
+	}
+	return ret;
+}
+
+static struct lcd_seq_info SEQ_ALPM_2NIT_ON_SET[] = {
+	{(u8 *)SEQ_SELECT_ALPM_2NIT, ARRAY_SIZE(SEQ_SELECT_ALPM_2NIT), 0},
+	{(u8 *)SEQ_2NIT_MODE_ON, ARRAY_SIZE(SEQ_2NIT_MODE_ON), 0},
+};
+
+static struct lcd_seq_info SEQ_ALPM_40NIT_ON_SET[] = {
+	{(u8 *)SEQ_SELECT_ALPM_2NIT, ARRAY_SIZE(SEQ_SELECT_ALPM_2NIT), 0},
+	{(u8 *)SEQ_40NIT_MODE_ON, ARRAY_SIZE(SEQ_40NIT_MODE_ON), 0},
+};
+
+static struct lcd_seq_info SEQ_HLPM_2NIT_ON_SET[] = {
+	{(u8 *)SEQ_SELECT_HLPM_2NIT, ARRAY_SIZE(SEQ_SELECT_HLPM_2NIT), 0},
+	{(u8 *)SEQ_2NIT_MODE_ON, ARRAY_SIZE(SEQ_2NIT_MODE_ON), 0},
+};
+
+static struct lcd_seq_info SEQ_HLPM_40NIT_ON_SET[] = {
+	{(u8 *)SEQ_SELECT_HLPM_2NIT, ARRAY_SIZE(SEQ_SELECT_HLPM_2NIT), 0},
+	{(u8 *)SEQ_40NIT_MODE_ON, ARRAY_SIZE(SEQ_40NIT_MODE_ON), 0},
+};
+
+static struct lcd_seq_info SEQ_NORMAL_MODE_ON_SET[] = {
+	{(u8 *)SEQ_NORMAL_MODE_ON, ARRAY_SIZE(SEQ_NORMAL_MODE_ON), 0},
+};
+
 int alpm_set_mode(struct dsim_device *dsim, int enable)
 {
 	struct panel_private *priv = &(dsim->priv);
-	if(priv->alpm_support != 1) {
-		pr_info("%s this panel do not support alpm %d!\n", __func__, priv->alpm_support);
-		return 0;
-	}
-	if((enable != ALPM_ON) && (enable != ALPM_OFF)) {
+
+	if((enable < ALPM_OFF) && (enable > HLPM_ON_40NIT)) {
 		pr_info("alpm state is invalid %d !\n", priv->alpm);
 		return 0;
 	}
+
 	dsim_write_hl_data(dsim, SEQ_DISPLAY_OFF, ARRAY_SIZE(SEQ_DISPLAY_OFF));
 	usleep_range(17000, 17000);
 	dsim_write_hl_data(dsim, SEQ_TEST_KEY_ON_F0, ARRAY_SIZE(SEQ_TEST_KEY_ON_F0));
-	if(enable == ALPM_ON) {
-		dsim_write_hl_data(dsim, SEQ_ALPM2NIT_MODE_ON, ARRAY_SIZE(SEQ_ALPM2NIT_MODE_ON));
-	} else if(enable == ALPM_OFF) {
-		dsim_write_hl_data(dsim, SEQ_NORMAL_MODE_ON, ARRAY_SIZE(SEQ_NORMAL_MODE_ON));
+	dsim_write_hl_data(dsim, SEQ_TEST_KEY_ON_FC, ARRAY_SIZE(SEQ_TEST_KEY_ON_FC));
+
+	if(enable == ALPM_OFF) {
+		alpm_write_set(dsim, SEQ_NORMAL_MODE_ON_SET, ARRAY_SIZE(SEQ_NORMAL_MODE_ON_SET));
+	} else {
+		switch(enable) {
+		case HLPM_ON_2NIT:
+			alpm_write_set(dsim, SEQ_HLPM_2NIT_ON_SET, ARRAY_SIZE(SEQ_HLPM_2NIT_ON_SET));
+			pr_info("%s : HLPM_ON_2NIT !\n", __func__);
+			break;
+		case ALPM_ON_2NIT:
+			alpm_write_set(dsim, SEQ_ALPM_2NIT_ON_SET, ARRAY_SIZE(SEQ_ALPM_2NIT_ON_SET));
+			pr_info("%s : ALPM_ON_2NIT !\n", __func__);
+			break;
+		case HLPM_ON_40NIT:
+			alpm_write_set(dsim, SEQ_HLPM_40NIT_ON_SET, ARRAY_SIZE(SEQ_HLPM_40NIT_ON_SET));
+			pr_info("%s : HLPM_ON_40NIT !\n", __func__);
+			break;
+		case ALPM_ON_40NIT:
+			alpm_write_set(dsim, SEQ_ALPM_40NIT_ON_SET, ARRAY_SIZE(SEQ_ALPM_40NIT_ON_SET));
+			pr_info("%s : ALPM_ON_40NIT !\n", __func__);
+			break;
+		default:
+			pr_info("%s: input is out of range : %d \n", __func__, enable);
+			break;
+		}
+		dsim_write_hl_data(dsim, HF3_A3_IRC_off, ARRAY_SIZE(HF3_A3_IRC_off));
 	}
+
 	dsim_write_hl_data(dsim, SEQ_GAMMA_UPDATE, ARRAY_SIZE(SEQ_GAMMA_UPDATE));
 	dsim_write_hl_data(dsim, SEQ_GAMMA_UPDATE_L, ARRAY_SIZE(SEQ_GAMMA_UPDATE_L));
-	dsim_write_hl_data(dsim, SEQ_TEST_KEY_OFF_F0, ARRAY_SIZE(SEQ_TEST_KEY_OFF_F0));
-	dsim_write_hl_data(dsim, SEQ_DISPLAY_ON, ARRAY_SIZE(SEQ_DISPLAY_ON)); /* (workaround) DDI 0x0A register : DISP_ON bit not upset */
+
 	usleep_range(17000, 17000);
+
 	dsim_write_hl_data(dsim, SEQ_DISPLAY_ON, ARRAY_SIZE(SEQ_DISPLAY_ON));
+	read_panel_status(dsim);
+
+	dsim_write_hl_data(dsim, SEQ_TEST_KEY_OFF_F0, ARRAY_SIZE(SEQ_TEST_KEY_OFF_F0));
+	dsim_write_hl_data(dsim, SEQ_TEST_KEY_OFF_FC, ARRAY_SIZE(SEQ_TEST_KEY_OFF_FC));
 
 	priv->current_alpm = dsim->alpm = enable;
 
 	return 0;
 }
-#else
-int alpm_set_mode(struct dsim_device *dsim, int enable)
-{
-	struct panel_private *priv = &(dsim->priv);
-	if((enable != ALPM_ON) && (enable != ALPM_OFF)) {
-		pr_info("alpm state is invalid %d !\n", priv->alpm);
-		return 0;
-	}
-	dsim_write_hl_data(dsim, SEQ_DISPLAY_OFF, ARRAY_SIZE(SEQ_DISPLAY_OFF));
-	usleep_range(17000, 17000);
-	dsim_write_hl_data(dsim, SEQ_TEST_KEY_ON_F0, ARRAY_SIZE(SEQ_TEST_KEY_ON_F0));
-	if(enable == ALPM_ON) {
-		priv->mtpForALPM[34] = priv->mtpForALPM[35]= 0;
-		dsim_write_hl_data(dsim, priv->mtpForALPM, ARRAY_SIZE(priv->mtpForALPM));
-		dsim_write_hl_data(dsim, SEQ_ALPM2NIT_MODE_ON, ARRAY_SIZE(SEQ_ALPM2NIT_MODE_ON));
-	} else if(enable == ALPM_OFF) {
-		priv->mtpForALPM[34] = priv->prev_VT[0];
-		priv->mtpForALPM[35] = priv->prev_VT[1];
-		dsim_write_hl_data(dsim, priv->mtpForALPM, ARRAY_SIZE(priv->mtpForALPM));
-		dsim_write_hl_data(dsim, SEQ_NORMAL_MODE_ON, ARRAY_SIZE(SEQ_NORMAL_MODE_ON));
-	}
-	dsim_write_hl_data(dsim, SEQ_GAMMA_UPDATE, ARRAY_SIZE(SEQ_GAMMA_UPDATE));
-	dsim_write_hl_data(dsim, SEQ_GAMMA_UPDATE_L, ARRAY_SIZE(SEQ_GAMMA_UPDATE_L));
-	dsim_write_hl_data(dsim, SEQ_TEST_KEY_OFF_F0, ARRAY_SIZE(SEQ_TEST_KEY_OFF_F0));
-	usleep_range(17000, 17000);
-	dsim_write_hl_data(dsim, SEQ_DISPLAY_ON, ARRAY_SIZE(SEQ_DISPLAY_ON));
 
-	priv->current_alpm = dsim->alpm = enable;
-
-	return 0;
-}
-#endif
 static ssize_t alpm_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
@@ -428,40 +534,52 @@ static ssize_t alpm_store(struct device *dev,
 	sscanf(buf, "%9d", &value);
 	dev_info(dev, "%s: %d \n", __func__, value);
 
+	if(priv->alpm_support == UNSUPPORT_ALPM) {
+		pr_info("%s this panel does not support ALPM!\n", __func__);
+		return size;
+	}
+
 	mutex_lock(&priv->alpm_lock);
-#if defined (CONFIG_SEC_FACTORY)
-	if (value) {
-		if ((priv->state == PANEL_STATE_RESUMED) && !priv->current_alpm) {
-			prev_brightness = priv->bd->props.brightness;
-			priv->bd->props.brightness = UI_MIN_BRIGHTNESS;
-			dsim_panel_set_brightness(dsim, 1);
-			alpm_set_mode(dsim, ALPM_ON);
+	if(priv->state == PANEL_STATE_RESUMED) {
+		switch(value) {
+		case ALPM_OFF:
+			if(priv->current_alpm) {
+#ifdef CONFIG_SEC_FACTORY
+				priv->bd->props.brightness = prev_brightness;
+#endif
+				alpm_set_mode(dsim, ALPM_OFF);
+				usleep_range(17000, 17000);
+				dsim_panel_set_brightness(dsim, 1);
+			} else {
+				dev_info(dev, "%s: alpm current state : %d input : %d\n",
+					__func__, priv->current_alpm, value);
+			}
+			break;
+		case ALPM_ON_2NIT:
+		case HLPM_ON_2NIT:
+		case ALPM_ON_40NIT:
+		case HLPM_ON_40NIT:
+#ifdef CONFIG_SEC_FACTORY
+			if(priv->alpm == ALPM_OFF) {
+				prev_brightness = priv->bd->props.brightness;
+				priv->bd->props.brightness = UI_MIN_BRIGHTNESS;
+				dsim_panel_set_brightness(dsim, 1);
+			}
+#endif
+			alpm_set_mode(dsim, value);
+			break;
+		default:
+			dev_info(dev, "%s: input is out of range : %d \n", __func__, value);
+			break;
 		}
 	} else {
-		if ((priv->state == PANEL_STATE_RESUMED) && priv->current_alpm) {
-			priv->bd->props.brightness = prev_brightness;
-			alpm_set_mode(dsim, ALPM_OFF);
-			dsim_panel_set_brightness(dsim, 1);
-		}
+		dev_info(dev, "%s: panel state is not active\n", __func__);
 	}
-#else
-	if (value) {
-		if ((priv->state == PANEL_STATE_RESUMED) && !priv->current_alpm)
-			alpm_set_mode(dsim, ALPM_ON);
-	} else {
-		if ((priv->state == PANEL_STATE_RESUMED)&& priv->current_alpm)
-			alpm_set_mode(dsim, ALPM_OFF);
-#if defined(CONFIG_PANEL_S6E3HF3_DYNAMIC)
-		usleep_range(17000, 17000);
-		dsim_panel_set_brightness(dsim, 1);
-#endif
-	}
-#endif
 	priv->alpm = value;
 
 	mutex_unlock(&priv->alpm_lock);
 
-	dev_info(dev, "%s: %d %d\n", __func__, priv->alpm, dsim->alpm);
+	dev_info(dev, "%s: %d\n", __func__, priv->alpm);
 
 	return size;
 }
@@ -514,10 +632,10 @@ static ssize_t alpm_doze_store(struct device *dev,
 				call_panel_ops(dsim, displayon, dsim);
 			}
 			break;
-		case ALPM_ON_LOW:
-		case HLPM_ON_LOW:
-		case ALPM_ON_HIGH:
-		case HLPM_ON_HIGH:
+		case ALPM_ON_2NIT:
+		case HLPM_ON_2NIT:
+		case ALPM_ON_40NIT:
+		case HLPM_ON_40NIT:
 			priv->alpm_mode = value;
 			if ((dsim->dsim_doze == DSIM_DOZE_STATE_DOZE) ||
 				(dsim->dsim_doze == DSIM_DOZE_STATE_NORMAL)) {
@@ -537,10 +655,10 @@ static ssize_t alpm_doze_store(struct device *dev,
 	}
 #else
 	switch (value) {
-		case ALPM_ON_LOW:
-		case HLPM_ON_LOW:
-		case ALPM_ON_HIGH:
-		case HLPM_ON_HIGH:
+		case ALPM_ON_2NIT:
+		case HLPM_ON_2NIT:
+		case ALPM_ON_40NIT:
+		case HLPM_ON_40NIT:
 			if (output_lock != NULL)
 				mutex_lock(output_lock);
 
@@ -591,6 +709,20 @@ static ssize_t window_type_show(struct device *dev,
 	struct panel_private *priv = dev_get_drvdata(dev);
 
 	sprintf(buf, "%02x %02x %02x\n", priv->id[0], priv->id[1], priv->id[2]);
+
+
+	return strlen(buf);
+}
+
+static ssize_t SVC_OCTA_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct panel_private *priv = dev_get_drvdata(dev);
+
+	sprintf(buf, "%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X\n",
+		priv->date[0] , priv->date[1], priv->date[2], priv->date[3], priv->date[4],
+		priv->date[5],priv->date[6], (priv->coordinate[0] &0xFF00)>>8,priv->coordinate[0] &0x00FF,
+		(priv->coordinate[1]&0xFF00)>>8,priv->coordinate[1]&0x00FF);
 
 	return strlen(buf);
 }
@@ -805,6 +937,76 @@ static ssize_t ldu_store(struct device *dev,
 static DEVICE_ATTR(ldu, 0000, ldu_show, ldu_store);
 #endif
 
+#if defined(CONFIG_PANEL_S6E3HF3_DYNAMIC) || defined(CONFIG_PANEL_S6E3HA3_DYNAMIC)
+static int set_partial_display(struct dsim_device *dsim)
+{
+	u32 st, ed;
+	u8 area_cmd[5] = {0x30,};
+	u8 partial_mode[1] = {0x12};
+	u8 normal_mode[1] = {0x13};
+
+	st =	dsim->lcd_info.partial_range[0];
+	ed = dsim->lcd_info.partial_range[1];
+
+	if (st || ed) {
+		area_cmd[1] = (st >> 8) & 0xFF;/*select msb 1byte*/
+		area_cmd[2] = st & 0xFF;
+		area_cmd[3] = (ed >> 8) & 0xFF;/*select msb 1byte*/
+		area_cmd[4] = ed & 0xFF;
+
+		dsim_write_hl_data(dsim, area_cmd, ARRAY_SIZE(area_cmd));
+		dsim_write_hl_data(dsim, partial_mode, ARRAY_SIZE(partial_mode));
+	} else
+		dsim_write_hl_data(dsim, normal_mode, ARRAY_SIZE(normal_mode));
+
+	return 0;
+}
+
+static ssize_t partial_disp_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct dsim_device *dsim;
+	struct panel_private *priv = dev_get_drvdata(dev);
+
+	dsim = container_of(priv, struct dsim_device, priv);
+
+	sprintf((char *)buf, "%d, %d\n", dsim->lcd_info.partial_range[0], dsim->lcd_info.partial_range[1]);
+
+	dev_info(dev, "%s: %d, %d\n", __func__, dsim->lcd_info.partial_range[0], dsim->lcd_info.partial_range[1]);
+
+	return strlen(buf);
+}
+
+static ssize_t partial_disp_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct dsim_device *dsim;
+	struct panel_private *priv = dev_get_drvdata(dev);
+
+	u32 st, ed;
+
+	dsim = container_of(priv, struct dsim_device, priv);
+
+	sscanf(buf, "%9d %9d" , &st, &ed);
+
+	dev_info(dev, "%s: %d, %d\n", __func__, st, ed);
+
+	if ((st >= dsim->lcd_info.yres || ed >= dsim->lcd_info.yres) || (st > ed)) {
+		pr_err("%s:Invalid Input\n", __func__);
+		return size;
+	}
+
+	dsim->lcd_info.partial_range[0] = st;
+	dsim->lcd_info.partial_range[1] = ed;
+
+	set_partial_display(dsim);
+
+	return size;
+}
+
+static DEVICE_ATTR(partial_disp, 0664, partial_disp_show, partial_disp_store);
+#endif
+
 #ifdef CONFIG_PANEL_AID_DIMMING
 static void show_aid_log(struct dsim_device *dsim)
 {
@@ -912,6 +1114,219 @@ static ssize_t cell_id_show(struct device *dev,
 
 	return strlen(buf);
 }
+
+#ifdef CONFIG_LCD_WEAKNESS_CCB
+void ccb_set_mode(struct dsim_device *dsim, u8 ccb, int stepping)
+{
+	u8 ccb_cmd[3] = {0xB7, 0x00, 0x00};
+	u8 secondval = 0;
+
+	dsim_write_hl_data(dsim, SEQ_TEST_KEY_ON_F0, ARRAY_SIZE(SEQ_TEST_KEY_ON_F0));
+	switch( dsim->priv.panel_type ) {
+	case LCD_TYPE_S6E3HF3_WQHD:
+		if((ccb & 0x0F) == 0x00) {		// off
+			if(stepping) {
+				ccb_cmd[1] = dsim->priv.current_ccb;
+				for(secondval = 0x2A; secondval <= 0x3F; secondval += 1) {
+					ccb_cmd[2] = secondval;
+					dsim_write_hl_data(dsim, ccb_cmd, ARRAY_SIZE(ccb_cmd));
+					msleep(17);
+				}
+			}
+			ccb_cmd[1] = 0x00;
+			ccb_cmd[2] = 0x3F;
+			dsim_write_hl_data(dsim, ccb_cmd, ARRAY_SIZE(ccb_cmd));
+		} else {						// on
+			ccb_cmd[1] = ccb;
+			if(stepping) {
+				for(secondval = 0x3F; secondval >= 0x2A; secondval -= 1) {
+					ccb_cmd[2] = secondval;
+					dsim_write_hl_data(dsim, ccb_cmd, ARRAY_SIZE(ccb_cmd));
+					if(secondval != 0x2A)
+						msleep(17);
+				}
+			} else {
+				ccb_cmd[2] = 0x2A;
+				dsim_write_hl_data(dsim, ccb_cmd, ARRAY_SIZE(ccb_cmd));
+			}
+		}
+		msleep(17);
+		break;
+	case LCD_TYPE_S6E3HA3_WQHD:
+		if((ccb & 0x0F) == 0x00) {		// off
+			if(stepping) {
+				ccb_cmd[1] = dsim->priv.current_ccb;
+				for(secondval = 0x2A; secondval <= 0x3F; secondval += 1) {
+					ccb_cmd[2] = secondval;
+					dsim_write_hl_data(dsim, ccb_cmd, ARRAY_SIZE(ccb_cmd));
+					msleep(17);
+				}
+			}
+			ccb_cmd[1] = 0x00;
+			ccb_cmd[2] = 0x3F;
+			dsim_write_hl_data(dsim, ccb_cmd, ARRAY_SIZE(ccb_cmd));
+		} else {						// on
+			ccb_cmd[1] = ccb;
+			if(stepping) {
+				for(secondval = 0x3F; secondval >= 0x2A; secondval -= 1) {
+					ccb_cmd[2] = secondval;
+					dsim_write_hl_data(dsim, ccb_cmd, ARRAY_SIZE(ccb_cmd));
+					if(secondval != 0x2A)
+						msleep(17);
+				}
+			} else {
+				ccb_cmd[2] = 0x2A;
+				dsim_write_hl_data(dsim, ccb_cmd, ARRAY_SIZE(ccb_cmd));
+			}
+		}
+		msleep(17);
+		break;
+	default:
+		pr_info("%s unknown panel \n", __func__);
+		break;
+	}
+
+	dsim_write_hl_data(dsim, SEQ_TEST_KEY_OFF_F0, ARRAY_SIZE(SEQ_TEST_KEY_OFF_F0));
+}
+
+static ssize_t weakness_ccb_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	return strlen(buf);
+}
+
+static ssize_t weakness_ccb_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	int ret;
+	int type, serverity;
+	unsigned char set_ccb = 0x00;
+	struct dsim_device *dsim;
+	struct panel_private *priv = dev_get_drvdata(dev);
+
+	dsim = container_of(priv, struct dsim_device, priv);
+
+	ret = sscanf(buf, "%d %d", &type, &serverity);
+
+	if (ret < 0)
+		return ret;
+
+	dev_info(dev, "%s: type = %d serverity = %d\n", __func__, type, serverity);
+
+	if(priv->ccb_support == UNSUPPORT_CCB) {
+		pr_info("%s this panel does not support CCB!\n", __func__);
+		return size;
+	}
+
+	if((type < 0) || (type > 3)) {
+		dev_info(dev, "%s: type is out of range\n", __func__);
+		ret = -EINVAL;
+	} else if((serverity < 0) || (serverity > 9)) {
+		dev_info(dev, "%s: serverity is out of range\n", __func__);
+		ret = -EINVAL;
+	} else {
+		set_ccb = ((u8)(serverity) << 4);
+		switch(type) {
+		case 0:
+			set_ccb = 0;
+			dev_info(dev, "%s: disable ccb\n", __func__);
+			break;
+		case 1:
+			set_ccb += 1;
+			dev_info(dev, "%s: enable red\n", __func__);
+			break;
+		case 2:
+			set_ccb += 5;
+			dev_info(dev, "%s: enable green\n", __func__);
+			break;
+		case 3:
+			if(serverity == 0) {
+				set_ccb += 9;
+				dev_info(dev, "%s: enable blue\n", __func__);
+			} else {
+				set_ccb = 0;
+				set_ccb += 9;
+				dev_info(dev, "%s: serverity is out of range, blue only support 0\n", __func__);
+			}
+			break;
+		default:
+			set_ccb = 0;
+			break;
+		}
+		if(priv->current_ccb == set_ccb) {
+			dev_info(dev, "%s: aleady set same ccb\n", __func__);
+		} else {
+			ccb_set_mode(dsim, set_ccb, 1);
+			priv->current_ccb = set_ccb;
+		}
+	}
+	dev_info(dev, "%s: --\n", __func__);
+
+	return size;
+}
+static DEVICE_ATTR(weakness_ccb, 0664, weakness_ccb_show, weakness_ccb_store);
+
+#endif
+
+#ifdef CONFIG_PANEL_DDI_SPI
+static int ddi_spi_enablespi_send(struct dsim_device *dsim)
+{
+	int ret =0;
+
+	dsim_write_hl_data(dsim, SEQ_TEST_KEY_ON_F0, ARRAY_SIZE(SEQ_TEST_KEY_ON_F0));
+	dsim_write_hl_data(dsim, SEQ_TEST_KEY_ON_FC, ARRAY_SIZE(SEQ_TEST_KEY_ON_FC));
+	dsim_write_hl_data(dsim, SEQ_B0_13, ARRAY_SIZE(SEQ_B0_13));
+	dsim_write_hl_data(dsim, SEQ_D8_02, ARRAY_SIZE(SEQ_D8_02));
+	dsim_write_hl_data(dsim, SEQ_B0_1F, ARRAY_SIZE(SEQ_B0_1F));
+	dsim_write_hl_data(dsim, SEQ_FE_06, ARRAY_SIZE(SEQ_FE_06));
+	msleep(30);
+	dsim_write_hl_data(dsim, SEQ_TEST_KEY_OFF_F0, ARRAY_SIZE(SEQ_TEST_KEY_OFF_F0));
+	dsim_write_hl_data(dsim, SEQ_TEST_KEY_OFF_FC, ARRAY_SIZE(SEQ_TEST_KEY_OFF_FC));
+
+	return ret;
+}
+
+static ssize_t read_copr_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	static int string_size = 70;
+	char temp[string_size];
+	int* copr;
+
+	struct dsim_device *dsim;
+	struct panel_private *priv = dev_get_drvdata(dev);
+	struct panel_private *panel;
+
+	dsim = container_of(priv, struct dsim_device, priv);
+	panel = &dsim->priv;
+
+	if(panel->state == PANEL_STATE_RESUMED)
+	{
+		ddi_spi_enablespi_send(dsim);
+
+		mutex_lock(&panel->lock);
+		copr = ddi_spi_read_opr();
+		mutex_unlock(&panel->lock);
+
+		pr_info("%s %x %x %x %x %x %x %x %x %x %x \n", __func__,
+				copr[0], copr[1], copr[2], copr[3], copr[4],
+				copr[5], copr[6], copr[7], copr[8], copr[9]);
+
+		snprintf((char *)temp, sizeof(temp), "%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
+			copr[0], copr[1], copr[2], copr[3], copr[4], copr[5], copr[6], copr[7], copr[8], copr[9]);
+	}
+	else
+	{
+		snprintf((char *)temp, sizeof(temp), "00 00 00 00 00 00 00 00 00 00\n");
+	}
+
+	strlcat(buf, temp, string_size);
+
+	return strnlen(buf, string_size);
+
+}
+static DEVICE_ATTR(read_copr, 0444, read_copr_show, NULL);
+#endif
 
 #if defined(CONFIG_PANEL_S6E3HF2_DYNAMIC) || defined(CONFIG_PANEL_S6E3HA2_DYNAMIC)	//only zero
 static int find_hbm_table(struct dsim_device *dsim, int nit)
@@ -1154,6 +1569,7 @@ static DEVICE_ATTR(octa_id, 0444, octa_id_show, NULL);
 #endif
 
 
+
 #ifdef CONFIG_FB_DSU
 static ssize_t resolution_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
@@ -1209,6 +1625,7 @@ static DEVICE_ATTR(accessibility, 0000, accessibility_show, accessibility_store)
 static DEVICE_ATTR(adaptive_control, 0664, adaptive_control_show, adaptive_control_store);
 static DEVICE_ATTR(lcd_type, 0444, lcd_type_show, NULL);
 static DEVICE_ATTR(window_type, 0444, window_type_show, NULL);
+static DEVICE_ATTR(SVC_OCTA, 0444, SVC_OCTA_show, NULL);
 static DEVICE_ATTR(manufacture_code, 0444, manufacture_code_show, NULL);
 static DEVICE_ATTR(cell_id, 0444, cell_id_show, NULL);
 static DEVICE_ATTR(brightness_table, 0444, brightness_table_show, NULL);
@@ -1232,6 +1649,8 @@ static struct attribute *lcd_sysfs_attributes[] = {
 	&dev_attr_temperature.attr,
 	&dev_attr_color_coordinate.attr,
 	&dev_attr_manufacture_date.attr,
+	&dev_attr_SVC_OCTA.attr,
+	&dev_attr_partial_disp.attr,
 #ifdef CONFIG_PANEL_AID_DIMMING
 	&dev_attr_aid_log.attr,
 #endif
@@ -1256,6 +1675,12 @@ static struct attribute *lcd_sysfs_attributes[] = {
 	&dev_attr_accessibility.attr,
 #ifdef CONFIG_CHECK_OCTA_CHIP_ID
 	&dev_attr_octa_id.attr,
+#endif
+#ifdef CONFIG_LCD_WEAKNESS_CCB
+	&dev_attr_weakness_ccb.attr,
+#endif
+#ifdef CONFIG_PANEL_DDI_SPI
+	&dev_attr_read_copr.attr,
 #endif
 #ifdef CONFIG_FB_DSU
 	&dev_attr_resolution.attr,
@@ -1283,5 +1708,3 @@ void lcd_init_sysfs(struct dsim_device *dsim)
 
 	dsim->lcd->dev.groups = lcd_sysfs_attr_groups;
 }
-
-

@@ -83,6 +83,10 @@ EXPORT_SYMBOL(dsim0_for_decon);
 struct dsim_device *dsim1_for_decon;
 EXPORT_SYMBOL(dsim1_for_decon);
 
+#ifdef CONFIG_LCD_RES
+static int g_lcd_res = 0;
+#endif
+
 static void dsim_dump(struct dsim_device *dsim, int dump_panel)
 {
 	dsim_info("=== DSIM SFR DUMP ===\n");
@@ -1204,6 +1208,11 @@ static int dsim_enable(struct dsim_device *dsim)
 #ifdef CONFIG_LCD_DOZE_MODE
 		if ((dsim->dsim_doze == DSIM_DOZE_STATE_DOZE) ||
 			(dsim->dsim_doze == DSIM_DOZE_STATE_DOZE_SUSPEND)) {
+#ifdef CONFIG_VDDR_1p5V_ALPM
+			if( regulator_set_voltage(dsim->res.regulator_16V, 1600000, 1600000) == 0 )
+				dsim_info( "%s : vddr to 1.6v successed\n", __func__ );
+			else dsim_err( "%s : vddr to 1.6v failed\n", __func__ );
+#endif
 			call_panel_ops(dsim, exitalpm, dsim);
 		}
 #endif
@@ -1216,7 +1225,16 @@ static int dsim_enable(struct dsim_device *dsim)
 	dsim_runtime_resume(dsim->dev);
 #endif
 
+#ifdef CONFIG_LCD_DOZE_MODE
+	if ((dsim->dsim_doze == DSIM_DOZE_STATE_DOZE) ||
+		(dsim->dsim_doze == DSIM_DOZE_STATE_DOZE_SUSPEND)) {
+		dsim_info("%s : exit doze\n", __func__);
+	} else {
+		dsim_set_panel_power(dsim, 1);
+	}
+#else
 	dsim_set_panel_power(dsim, 1);
+#endif
 
 	call_panel_ops(dsim, resume, dsim);
 
@@ -1258,6 +1276,11 @@ static int dsim_enable(struct dsim_device *dsim)
 #ifdef CONFIG_LCD_DOZE_MODE
 	if ((dsim->dsim_doze == DSIM_DOZE_STATE_DOZE) ||
 		(dsim->dsim_doze == DSIM_DOZE_STATE_DOZE_SUSPEND)) {
+#ifdef CONFIG_VDDR_1p5V_ALPM
+		if( regulator_set_voltage(dsim->res.regulator_16V, 1600000, 1600000) == 0 )
+			dsim_info( "%s : vddr to 1.6v successed\n", __func__ );
+		else dsim_err( "%s : vddr to 1.6v failed\n", __func__ );
+#endif
 		call_panel_ops(dsim, exitalpm, dsim);
 	} else {
 		call_panel_ops(dsim, displayon, dsim);
@@ -1366,6 +1389,11 @@ static int dsim_doze_enable(struct dsim_device *dsim)
 #endif
 
 	if (dsim->dsim_doze == DSIM_DOZE_STATE_SUSPEND) {
+#ifdef CONFIG_VDDR_1p5V_ALPM
+		if( regulator_set_voltage(dsim->res.regulator_16V, 1500000, 1500000) == 0 )
+			dsim_info( "%s : vddr to 1.5v successed\n", __func__ );
+		else dsim_err( "%s : vddr to 1.5v failed\n", __func__ );
+#endif
 		dsim_set_panel_power(dsim, 1);
 	}
 
@@ -1880,7 +1908,23 @@ static int dsim_parse_lcd_info(struct dsim_device *dsim)
 	of_property_read_u32(node, "mode", &dsim->lcd_info.mode);
 	dsim_dbg("%s mode\n", dsim->lcd_info.mode ? "command" : "video");
 
+#ifdef CONFIG_LCD_RES
+	dsim_info( "%s : LCD_RES %d", __func__, g_lcd_res );
+	dsim->priv.lcd_res = g_lcd_res;
+	switch( dsim->priv.lcd_res ) {
+	case LCD_RES_FHD:
+		of_property_read_u32_array(node, "resolution_fhd", res, 2);
+		break;
+	case LCD_RES_HD:
+		of_property_read_u32_array(node, "resolution_hd", res, 2);
+		break;
+	default:
+		of_property_read_u32_array(node, "resolution", res, 2);
+		break;
+	}
+#else
 	of_property_read_u32_array(node, "resolution", res, 2);
+#endif
 
 	dsim->lcd_info.xres = res[0];
 	dsim->lcd_info.yres = res[1];
@@ -2281,5 +2325,17 @@ static void __exit dsim_exit(void)
 }
 
 module_exit(dsim_exit);
+
+#ifdef CONFIG_LCD_RES
+static int __init get_lcdres(char *arg)
+{
+	get_option(&arg, (unsigned int*) &g_lcd_res);
+
+	dsim_info("%s : %d\n", __func__, g_lcd_res);
+
+	return 0;
+}
+early_param("lcdres", get_lcdres);
+#endif
 MODULE_AUTHOR("Jiun Yu <jiun.yu@samsung.com>");
 MODULE_DESCRIPTION("Samusung MIPI-DSI driver");

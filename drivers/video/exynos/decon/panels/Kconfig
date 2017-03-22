@@ -70,3 +70,16 @@ config PANEL_S6E3FA3_A8XE
 config PANEL_DUALIZATION
 	depends on PANEL_S6E3HF3_DYNAMIC
 	tristate "S6E3HF3 A3 PANEL DUALIZATION"
+	
+config PANEL_DDI_SPI
+	depends on EXYNOS_DECON_LCD && EXYNOS_MIPI_DSI
+	tristate "DDI SPI"
+	
+config VDDR_1p5V_ALPM
+	tristate "Grace : VDDR 1.5V in AOD mode"
+	default n
+
+config LCD_WEAKNESS_CCB
+	depends on EXYNOS_DECON_LCD && EXYNOS_MIPI_DSI
+	tristate "PANEL SUPPORT CCB"
+

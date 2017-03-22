@@ -124,9 +124,14 @@ config FB_DSU_REG_LOCK
         bool "Lock register while multi-resolution (only HF4)"
         depends on FB_DSU
         default n
-
+		
+config LCD_RES
+	bool "change LCD-resolution by BOOT_PARAM"
+	default n
+	
 source "drivers/video/exynos/decon/vpp/Kconfig"
 
 endif
 
 source "drivers/video/exynos/decon/panels/Kconfig"
+

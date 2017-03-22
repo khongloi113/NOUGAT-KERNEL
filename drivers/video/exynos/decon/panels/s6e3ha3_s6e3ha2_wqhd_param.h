@@ -52,6 +52,11 @@ struct lcd_seq_info
 #define HMT_ON							1
 #endif
 
+//change
+#define	UNSUPPORT_HMT	0
+#define	SUPPORT_HMT		1
+//change
+
 enum
 {
         HBM_STATUS_OFF,
@@ -395,7 +400,7 @@ static const unsigned char S6E3HA2_SEQ_TSET[] = {
         0x19                    /* Global para(8th) + 25 degrees  : 0x19 */
 };
 
-#if defined(CONFIG_FB_DSU)
+#if defined(CONFIG_LCD_RES) || defined(CONFIG_FB_DSU)
 static const unsigned char S6E3HA2_SEQ_DDI_SCALER_WQHD_00[] = {
 	0xBA,
 	0x01
@@ -731,7 +736,7 @@ static const unsigned char S6E3HA3_SEQ_TE_RISING_TIMING[] = {
 	0x01, 0x09, 0xFF, 0x00, 0x0A
 };
 
-#if defined(CONFIG_FB_DSU)
+#if defined(CONFIG_LCD_RES) || defined(CONFIG_FB_DSU)
 static const unsigned char S6E3HA3_SEQ_DDI_SCALER_FHD_00[] = {
         0xBA,
         0x02
@@ -1013,7 +1018,7 @@ static const unsigned char S6E3HF3_SEQ_PENTILE_SETTING[] = {
 	0x13, 0x20, 0x1E
 };
 
-#if defined(CONFIG_FB_DSU)
+#if defined(CONFIG_LCD_RES) || defined(CONFIG_FB_DSU)
 static const unsigned char S6E3HF3_SEQ_DDI_SCALER_FHD_00[] = {
         0xBA,
         0x02
@@ -1075,18 +1080,62 @@ static const unsigned char S6E3HF3_SEQ_DCDC[] = {
     0x50
 };
 
+//change
+#if defined (CONFIG_LCD_ALPM) || defined(CONFIG_LCD_DOZE_MODE)
 
+#define	ALPM_OFF						0
+#define ALPM_ON_2NIT					1
+#define HLPM_ON_2NIT                    2
+#define ALPM_ON_40NIT                   3
+#define HLPM_ON_40NIT                   4
 
-#ifdef CONFIG_LCD_ALPM
-static const unsigned char SEQ_ALPM2NIT_MODE_ON[] = {
+#define UNSUPPORT_ALPM					0
+#define SUPPORT_30HZALPM				1
+#define SUPPORT_LOWHZALPM				2
+
+static const unsigned char HF3_A3_IRC_off[2] = {0xB8, 0x00};
+
+static const unsigned char SEQ_2NIT_MODE_ON[] = {
 	0x53, 0x03
+};
+
+static const unsigned char SEQ_40NIT_MODE_ON[] = {
+	0x53, 0x02
 };
 
 static const unsigned char SEQ_NORMAL_MODE_ON[] = {
 	0x53, 0x00
 };
 
+
+static const unsigned char SEQ_SELECT_ALPM_2NIT[] = {
+	0xBB,
+	0xC4
+};
+
+static const unsigned char SEQ_SELECT_HLPM_2NIT[] = {
+	0xBB,
+	0x54
+};
+
+static const unsigned char SEQ_SELECT_ALPM_40NIT[] = {
+	0xBB,
+	0x84
+};
+
+static const unsigned char SEQ_SELECT_HLPM_40NIT[] = {
+	0xBB,
+	0x14
+};
+
 #endif
+
+//change
+#ifdef CONFIG_LCD_WEAKNESS_CCB
+#define	UNSUPPORT_CCB	0
+#define	SUPPORT_CCB	1
+#endif
+//change
 
 enum {
 	HBM_INTER_OFF = 0,
@@ -1100,4 +1149,34 @@ static const char HBM_INTER_22TH_OFFSET[] = {
 };
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #endif /* __S6E3HA3_PARAM_H__ */
+
