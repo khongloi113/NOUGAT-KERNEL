@@ -1426,6 +1426,7 @@ int decon_enable(struct decon_device *decon)
 	int state = decon->state;
 	int ret = 0;
 	unsigned int te_pending = 0;
+	
 #ifdef CONFIG_LCD_ALPM
 	int alpm = 0;
 	struct dsim_device *dsim = NULL;
@@ -1469,6 +1470,7 @@ int decon_enable(struct decon_device *decon)
 
 	if (decon->state == DECON_STATE_ON) {
 		decon_warn("decon%d already enabled\n", decon->id);
+		
 #ifdef CONFIG_LCD_DOZE_MODE
 		if (is_lcd_on) {
 			decon_info("%s :doze mode : %d\n", __func__, decon->decon_doze);

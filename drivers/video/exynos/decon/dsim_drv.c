@@ -1290,6 +1290,7 @@ static int dsim_enable(struct dsim_device *dsim)
 #endif
 
 	dsim_clocks_info(dsim);
+	
 exit_dsim_enable:
 #ifdef CONFIG_LCD_DOZE_MODE
 	dsim->dsim_doze = DSIM_DOZE_STATE_NORMAL;

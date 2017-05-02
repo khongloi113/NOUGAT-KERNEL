@@ -580,5 +580,137 @@ static const char HBM_INTER_22TH_OFFSET[IBRIGHTNESS_HBM_MAX][TEMP_MAX] = {
 	[IBRIGHTNESS_600NIT] =				{0x00,	0x00,	0x00}
 };
 
+//change
+#if defined (CONFIG_LCD_ALPM) || defined(CONFIG_LCD_DOZE_MODE)
+
+#define	ALPM_OFF						0
+#define ALPM_ON_2NIT					1
+#define HLPM_ON_2NIT                    2
+#define ALPM_ON_40NIT                   3
+#define HLPM_ON_40NIT                   4
+
+#define UNSUPPORT_ALPM					0
+#define SUPPORT_30HZALPM				1
+#define SUPPORT_LOWHZALPM				2
+
+static const unsigned char IRC_off[2] = {0xB8, 0x00};
+
+static const unsigned char SEQ_2NIT_MODE_ON[] = {
+	0x53, 0x03
+};
+
+static const unsigned char SEQ_40NIT_MODE_ON[] = {
+	0x53, 0x02
+};
+
+static const unsigned char SEQ_60NIT_MODE_ON[] = {
+	0x53, 0x02
+};
+
+static const unsigned char SEQ_NORMAL_MODE_ON[] = {
+	0x53, 0x00
+};
+
+static const unsigned char SEQ_AOD_LOWHZ_ON[] = {
+	0xBB, 0x01
+};
+
+static const unsigned char SEQ_AOD_LOWHZ_OFF[] = {
+	0xBB, 0x00
+};
+
+static const unsigned char SEQ_AID_MOD_OFF[] = {
+	0xBD, 0x00
+};
+
+static const unsigned char SEQ_AID_MOD_ON[] = {
+	0xBD,
+	0x01, 0x05, 0xF8, 0x05, 0xDA, 0x05, 0xB4, 0x05,
+	0x8E, 0x05, 0x70, 0x05, 0x4E, 0x05, 0x28, 0x05,
+	0x08, 0x04, 0xE3, 0x04, 0xC4, 0x04, 0xA2, 0x04,
+	0x81, 0x04, 0x5F, 0x04, 0x3F, 0x04, 0x2E, 0x04,
+	0x0B, 0x03, 0xE9, 0x03, 0xD6, 0x03, 0xB4, 0x03,
+	0x92, 0x03, 0x7F, 0x03, 0x7F, 0x03, 0x6F, 0x03,
+	0x4D,
+};
+
+static const unsigned char SEQ_2HZ_GPARA[] = {
+	0xB0, 0x1E
+};
+
+static const unsigned char SEQ_2HZ_SET[] = {
+	0xFE, 0x0F
+};
+
+static const unsigned char SEQ_SELECT_xLPM_NIT_GPARAM[] = {
+	0xB0,
+	0x07
+};
+
+static const unsigned char SEQ_SELECT_ALPM_2NIT[] = {
+	0xBB,
+	0xC1
+};
+
+static const unsigned char SEQ_SELECT_HLPM_2NIT[] = {
+	0xBB,
+	0x41
+};
+
+static const unsigned char SEQ_SELECT_ALPM_60NIT[] = {
+	0xBB,
+	0x81
+};
+
+static const unsigned char SEQ_SELECT_HLPM_60NIT[] = {
+	0xBB,
+	0x01
+};
+
+#endif
+
+//change
+#ifdef CONFIG_LCD_WEAKNESS_CCB
+#define	UNSUPPORT_CCB	0
+#define	SUPPORT_CCB	1
+#endif
+//change
+
+#if defined(CONFIG_LCD_RES) || defined(CONFIG_FB_DSU)
+static const unsigned char S6E3HA2_SEQ_DDI_SCALER_WQHD_00[] = {
+	0xBA,
+	0x01
+};
+
+static const unsigned char S6E3HA2_SEQ_DDI_SCALER_FHD_00[] = {
+	0xBA,
+	0x00
+};
+
+static const unsigned char S6E3HA2_SEQ_DDI_SCALER_FHD_01[] = {
+	0x2A,
+	0x00, 0x00, 0x04, 0x37,
+};
+
+static const unsigned char S6E3HA2_SEQ_DDI_SCALER_FHD_02[] = {
+	0x2B,
+	0x00, 0x00, 0x07, 0x7F,
+};
+
+static const unsigned char S6E3HA2_SEQ_DDI_SCALER_HD_00[] = {
+	0xBA,
+	0x01
+};
+
+static const unsigned char S6E3HA2_SEQ_DDI_SCALER_HD_01[] = { /* HA2 not support HD */
+	0x2A,
+	0x00, 0x00, 0x02, 0xCF,
+};
+
+static const unsigned char S6E3HA2_SEQ_DDI_SCALER_HD_02[] = {
+	0x2B,
+	0x00, 0x00, 0x04, 0xFF,
+};
+#endif
 
 #endif /* __S6E3HA0_PARAM_H__ */

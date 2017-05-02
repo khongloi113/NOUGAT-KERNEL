@@ -160,14 +160,11 @@ struct panel_private {
 	unsigned int 	alpm;
 	unsigned int 	current_alpm;
 	struct mutex	alpm_lock;
-	unsigned char mtpForALPM[36];
-	unsigned char prev_VT[2];
-	unsigned char alpm_support;			// because zero2 use 2panel(ha2, hf3)
 #endif
-
-#ifdef CONFIG_LCD_DOZE_MODE
 	unsigned int 	alpm_support;	// 0 : unsupport, 1 : 30hz, 2 : 1hz
 	unsigned int	hlpm_support;	// 0 : unsupport, 1 : 30hz
+
+#ifdef CONFIG_LCD_DOZE_MODE
 	unsigned int alpm_mode;
 	unsigned int curr_alpm_mode;
 #endif
@@ -264,6 +261,7 @@ struct dsim_device {
 	unsigned int	dsu_param_offset;
 	unsigned int	dsu_param_value;
 #endif
+	bool req_display_on;
 };
 
 /**
@@ -302,7 +300,7 @@ void dsim_pkt_go_ready(struct dsim_device *dsim);
 void dsim_pkt_go_enable(struct dsim_device *dsim, bool enable);
 #endif
 
-#if defined(CONFIG_LCD_ALPM) || defined(CONFIG_LCD_DOZE_MODE)
+#if defined(CONFIG_LCD_ALPM)
 #define	ALPM_OFF							0
 #define ALPM_ON							1
 int alpm_set_mode(struct dsim_device *dsim, int enable);

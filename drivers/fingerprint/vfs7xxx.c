@@ -1490,8 +1490,6 @@ static int vfsspi_parse_dt(struct device *dev,
 			data->detect_mode = DETECT_ADM;
 		}
 	}
-	data->detect_mode = DETECT_ADM;
-
 	if (of_property_read_u32(np, "vfsspi-ldocontrol",
 		&data->ldocontrol))
 		data->ldocontrol = 0;

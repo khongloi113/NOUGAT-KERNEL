@@ -1650,7 +1650,9 @@ static struct attribute *lcd_sysfs_attributes[] = {
 	&dev_attr_color_coordinate.attr,
 	&dev_attr_manufacture_date.attr,
 	&dev_attr_SVC_OCTA.attr,
+#if defined(CONFIG_PANEL_S6E3HF3_DYNAMIC) || defined(CONFIG_PANEL_S6E3HA3_DYNAMIC)
 	&dev_attr_partial_disp.attr,
+#endif
 #ifdef CONFIG_PANEL_AID_DIMMING
 	&dev_attr_aid_log.attr,
 #endif

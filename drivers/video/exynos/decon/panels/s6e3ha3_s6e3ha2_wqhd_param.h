@@ -1093,7 +1093,7 @@ static const unsigned char S6E3HF3_SEQ_DCDC[] = {
 #define SUPPORT_30HZALPM				1
 #define SUPPORT_LOWHZALPM				2
 
-static const unsigned char HF3_A3_IRC_off[2] = {0xB8, 0x00};
+static const unsigned char IRC_off[2] = {0xB8, 0x00};
 
 static const unsigned char SEQ_2NIT_MODE_ON[] = {
 	0x53, 0x03
@@ -1103,29 +1103,68 @@ static const unsigned char SEQ_40NIT_MODE_ON[] = {
 	0x53, 0x02
 };
 
+static const unsigned char SEQ_60NIT_MODE_ON[] = {
+	0x53, 0x02
+};
+
 static const unsigned char SEQ_NORMAL_MODE_ON[] = {
 	0x53, 0x00
 };
 
+static const unsigned char SEQ_AOD_LOWHZ_ON[] = {
+	0xBB, 0x01
+};
+
+static const unsigned char SEQ_AOD_LOWHZ_OFF[] = {
+	0xBB, 0x00
+};
+
+static const unsigned char SEQ_AID_MOD_OFF[] = {
+	0xBD, 0x00
+};
+
+static const unsigned char SEQ_AID_MOD_ON[] = {
+	0xBD,
+	0x01, 0x05, 0xF8, 0x05, 0xDA, 0x05, 0xB4, 0x05,
+	0x8E, 0x05, 0x70, 0x05, 0x4E, 0x05, 0x28, 0x05,
+	0x08, 0x04, 0xE3, 0x04, 0xC4, 0x04, 0xA2, 0x04,
+	0x81, 0x04, 0x5F, 0x04, 0x3F, 0x04, 0x2E, 0x04,
+	0x0B, 0x03, 0xE9, 0x03, 0xD6, 0x03, 0xB4, 0x03,
+	0x92, 0x03, 0x7F, 0x03, 0x7F, 0x03, 0x6F, 0x03,
+	0x4D,
+};
+
+static const unsigned char SEQ_2HZ_GPARA[] = {
+	0xB0, 0x1E
+};
+
+static const unsigned char SEQ_2HZ_SET[] = {
+	0xFE, 0x0F
+};
+
+static const unsigned char SEQ_SELECT_xLPM_NIT_GPARAM[] = {
+	0xB0,
+	0x07
+};
 
 static const unsigned char SEQ_SELECT_ALPM_2NIT[] = {
 	0xBB,
-	0xC4
+	0xC1
 };
 
 static const unsigned char SEQ_SELECT_HLPM_2NIT[] = {
 	0xBB,
-	0x54
+	0x41
 };
 
-static const unsigned char SEQ_SELECT_ALPM_40NIT[] = {
+static const unsigned char SEQ_SELECT_ALPM_60NIT[] = {
 	0xBB,
-	0x84
+	0x81
 };
 
-static const unsigned char SEQ_SELECT_HLPM_40NIT[] = {
+static const unsigned char SEQ_SELECT_HLPM_60NIT[] = {
 	0xBB,
-	0x14
+	0x01
 };
 
 #endif
@@ -1147,36 +1186,6 @@ enum {
 static const char HBM_INTER_22TH_OFFSET[] = {
 	0x02, 0x03, 0x05, 0x06, 0x06, 0x06, 0x06, 0x06
 };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 #endif /* __S6E3HA3_PARAM_H__ */
 
